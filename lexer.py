@@ -4,13 +4,15 @@
 
 from typing import List, Optional
 from tokens import Token, TokenType, KEYWORDS
+from symbol_table import SymbolTable
 
 
 class Lexer:
-    def __init__(self, source: str):
-        self.source = source
-        self.pos    = 0       # posição atual no código-fonte
-        self.line   = 1       # linha atual (para rastreamento de erros)
+    def __init__(self, source: str, symbol_table: SymbolTable):
+        self.source       = source
+        self.symbol_table = symbol_table
+        self.pos          = 0     # posição atual no código-fonte
+        self.line         = 1     # linha atual (para rastreamento de erros)
         self.tokens: List[Token] = []
 
     # --- Utilitários de navegação ---------------------------
@@ -64,14 +66,20 @@ class Lexer:
         return Token(TokenType.NUMBER, value, line)
 
     def read_identifier(self) -> Token:
-        """Lê um identificador e verifica se é palavra-chave."""
+        """Lê um identificador; registra na tabela de símbolos se for novo."""
         line, value = self.line, ""
 
         while self.current() and (self.current().isalnum() or self.current() == "_"):
             value += self.advance()
 
-        token_type = TokenType.KEYWORD if value in KEYWORDS else TokenType.IDENTIFIER
-        return Token(token_type, value, line)
+        if value in KEYWORDS:
+            # palavras-chave já estão pré-carregadas; só incrementa ocorrências
+            self.symbol_table.add(value, TokenType.KEYWORD, line)
+            return Token(TokenType.KEYWORD, value, line)
+
+        # identificador definido pelo usuário: adiciona/atualiza na tabela
+        self.symbol_table.add(value, TokenType.IDENTIFIER, line)
+        return Token(TokenType.IDENTIFIER, value, line)
 
     def read_string(self) -> Token:
         """Lê uma string delimitada por aspas duplas."""
@@ -96,10 +104,10 @@ class Lexer:
         if ch in ("=", "!") and self.current() == "=":
             return Token(TokenType.COMPARE_OP, ch + self.advance(), line)
 
-        if ch in ("<", ">"):   return Token(TokenType.COMPARE_OP, ch, line)
-        if ch == "=":          return Token(TokenType.ASSIGN_OP,  ch, line)
-        if ch in "+-*/":       return Token(TokenType.ARITH_OP,   ch, line)
-        if ch in "(){};,":     return Token(TokenType.DELIMITER,   ch, line)
+        if ch in ("<", ">"):  return Token(TokenType.COMPARE_OP, ch, line)
+        if ch == "=":         return Token(TokenType.ASSIGN_OP,  ch, line)
+        if ch in "+-*/":      return Token(TokenType.ARITH_OP,   ch, line)
+        if ch in "(){};,":    return Token(TokenType.DELIMITER,   ch, line)
 
         return Token(TokenType.INVALID, ch, line)
 
@@ -116,9 +124,9 @@ class Lexer:
 
             ch = self.current()
 
-            if ch.isdigit():              self.tokens.append(self.read_number())
+            if ch.isdigit():               self.tokens.append(self.read_number())
             elif ch.isalpha() or ch == "_": self.tokens.append(self.read_identifier())
-            elif ch == '"':               self.tokens.append(self.read_string())
-            else:                         self.tokens.append(self.read_operator_or_delimiter())
+            elif ch == '"':                self.tokens.append(self.read_string())
+            else:                          self.tokens.append(self.read_operator_or_delimiter())
 
         return self.tokens
